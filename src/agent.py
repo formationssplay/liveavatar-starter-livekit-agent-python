@@ -8,9 +8,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-import json
 import os
-import urllib.request
+import httpx
 from collections.abc import AsyncIterable
 
 from livekit import rtc
@@ -55,23 +54,20 @@ class LiveAvatarAgent(Agent):
             yield "Je n'ai pas compris ta demande."
             return
 
-        payload = json.dumps({
-            "message": user_text,
-            "sessionId": "lara-liveavatar"
-        }).encode("utf-8")
-
-        def call_n8n():
-            request = urllib.request.Request(
-                webhook_url,
-                data=payload,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(request, timeout=60) as response:
-                return json.loads(response.read().decode("utf-8"))
+                 async def call_n8n():
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    webhook_url,
+                    json={
+                        "message": user_text,
+                        "sessionId": "lara-liveavatar",
+                    },
+                )
+                response.raise_for_status()
+                return response.json()
 
         try:
-            result = await asyncio.to_thread(call_n8n)
+          result = await call_n8n()
             answer = result.get("answer") or "Je n'ai pas reçu de réponse exploitable."
             yield answer
         except Exception:
