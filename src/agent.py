@@ -8,6 +8,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import json
+import os
+import urllib.request
 from collections.abc import AsyncIterable
 
 from livekit import rtc
@@ -37,6 +40,43 @@ class LiveAvatarAgent(Agent):
             ),
         )
         self._avatar_ws = avatar_ws
+
+        async def llm_node(self, chat_ctx, tools, model_settings):
+        """Envoie la demande de Sidney à l'Agent Directeur n8n."""
+        webhook_url = os.environ["N8N_LARA_WEBHOOK_URL"]
+
+        user_text = ""
+        for item in reversed(chat_ctx.items):
+            if getattr(item, "role", None) == "user":
+                user_text = getattr(item, "text_content", "") or ""
+                break
+
+        if not user_text:
+            yield "Je n'ai pas compris ta demande."
+            return
+
+        payload = json.dumps({
+            "message": user_text,
+            "sessionId": "lara-liveavatar"
+        }).encode("utf-8")
+
+        def call_n8n():
+            request = urllib.request.Request(
+                webhook_url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return json.loads(response.read().decode("utf-8"))
+
+        try:
+            result = await asyncio.to_thread(call_n8n)
+            answer = result.get("answer") or "Je n'ai pas reçu de réponse exploitable."
+            yield answer
+        except Exception:
+            logger.exception("Erreur lors de l'appel à l'Agent Directeur n8n")
+            yield "Je rencontre un problème pour joindre l'Agent Directeur."
 
     # To add tools, decorate methods with @function_tool. Example:
     #
