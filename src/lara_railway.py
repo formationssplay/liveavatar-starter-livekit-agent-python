@@ -17,6 +17,7 @@ import signal
 
 from dotenv import load_dotenv
 from livekit import rtc
+from livekit.agents import utils
 from livekit.plugins import silero
 
 from agent import LiveAvatarAgent
@@ -60,87 +61,88 @@ async def main() -> None:
     avatar_ws: AvatarWebSocket | None = None
     started = None
 
-    async with LiveAvatarClient(api_key=api_key) as liveavatar:
-        try:
-            logger.info("Creating Lara LiveAvatar session...")
+    async with utils.http_context.open():
+        async with LiveAvatarClient(api_key=api_key) as liveavatar:
+            try:
+                logger.info("Creating Lara LiveAvatar session...")
 
-            token = await liveavatar.create_session_token(
-                avatar_id=avatar_id,
-                is_sandbox=is_sandbox,
-            )
+                token = await liveavatar.create_session_token(
+                    avatar_id=avatar_id,
+                    is_sandbox=is_sandbox,
+                )
 
-            started = await liveavatar.start_session(
-                session_token=token.session_token
-            )
+                started = await liveavatar.start_session(
+                    session_token=token.session_token
+                )
 
-            logger.info(
-                "LiveAvatar session started session_id=%s",
-                started.session_id,
-            )
+                logger.info(
+                    "LiveAvatar session started session_id=%s",
+                    started.session_id,
+                )
 
-            wire_room_observability(room)
-            mute_agent_audio_on_publish(room)
+                wire_room_observability(room)
+                mute_agent_audio_on_publish(room)
 
-            logger.info("Connecting Lara agent to LiveKit room...")
-            await room.connect(
-                started.livekit_url,
-                started.livekit_agent_token,
-            )
+                logger.info("Connecting Lara agent to LiveKit room...")
+                await room.connect(
+                    started.livekit_url,
+                    started.livekit_agent_token,
+                )
 
-            avatar_ws = AvatarWebSocket(ws_url=started.ws_url)
-            await avatar_ws.connect()
+                avatar_ws = AvatarWebSocket(ws_url=started.ws_url)
+                await avatar_ws.connect()
 
-            vad = silero.VAD.load()
-            session = build_session(vad)
-            wire_session_observability(session)
+                vad = silero.VAD.load()
+                session = build_session(vad)
+                wire_session_observability(session)
 
-            await session.start(
-                agent=LiveAvatarAgent(avatar_ws=avatar_ws),
-                room=room,
-                room_options=build_room_options(),
-            )
+                await session.start(
+                    agent=LiveAvatarAgent(avatar_ws=avatar_ws),
+                    room=room,
+                    room_options=build_room_options(),
+                )
 
-            logger.info("Lara is connected and ready.")
+                logger.info("Lara is connected and ready.")
 
-            disconnected = asyncio.Event()
+                disconnected = asyncio.Event()
 
-            @room.on("disconnected")
-            def _on_disconnected(*_args) -> None:
-                disconnected.set()
+                @room.on("disconnected")
+                def _on_disconnected(*_args) -> None:
+                    disconnected.set()
 
-            stop_task = asyncio.create_task(stop.wait())
-            disconnect_task = asyncio.create_task(disconnected.wait())
+                stop_task = asyncio.create_task(stop.wait())
+                disconnect_task = asyncio.create_task(disconnected.wait())
 
-            done, pending = await asyncio.wait(
-                {stop_task, disconnect_task},
-                return_when=asyncio.FIRST_COMPLETED,
-            )
+                done, pending = await asyncio.wait(
+                    {stop_task, disconnect_task},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
 
-            for task in pending:
-                task.cancel()
+                for task in pending:
+                    task.cancel()
 
-            for task in done:
-                with contextlib.suppress(asyncio.CancelledError):
-                    await task
+                for task in done:
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await task
 
-        finally:
-            logger.info("Stopping Lara...")
+            finally:
+                logger.info("Stopping Lara...")
 
-            if avatar_ws is not None:
-                with contextlib.suppress(Exception):
-                    await avatar_ws.close()
+                if avatar_ws is not None:
+                    with contextlib.suppress(Exception):
+                        await avatar_ws.close()
 
-            if room.isconnected():
-                with contextlib.suppress(Exception):
-                    await room.disconnect()
+                if room.isconnected():
+                    with contextlib.suppress(Exception):
+                        await room.disconnect()
 
-            if started is not None:
-                with contextlib.suppress(Exception):
-                    await liveavatar.stop_session(
-                        session_id=started.session_id
-                    )
+                if started is not None:
+                    with contextlib.suppress(Exception):
+                        await liveavatar.stop_session(
+                            session_id=started.session_id
+                        )
 
-            logger.info("Lara stopped cleanly.")
+                logger.info("Lara stopped cleanly.")
 
 
 if __name__ == "__main__":
