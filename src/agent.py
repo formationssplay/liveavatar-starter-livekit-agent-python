@@ -40,46 +40,45 @@ class LiveAvatarAgent(Agent):
         )
         self._avatar_ws = avatar_ws
 
-      async def llm_node(self, chat_ctx, tools, model_settings):
-            """Envoie la demande de Sidney à l'Agent Directeur n8n."""
-            webhook_url = os.environ["N8N_LARA_WEBHOOK_URL"]
-    
-            user_text = ""
-            for item in reversed(chat_ctx.items):
-                if getattr(item, "role", None) == "user":
-                    user_text = getattr(item, "text_content", "") or ""
-                    break
-    
-            if not user_text:
-                yield "Je n'ai pas compris ta demande."
-                return
-    
-            async def call_n8n():
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    response = await client.post(
-                        webhook_url,
-                        json={
-                            "message": user_text,
-                            "sessionId": "lara-liveavatar",
-                        },
-                    )
-                    response.raise_for_status()
-                    return response.json()
-    
-            try:
-                result = await call_n8n()
-                answer = (
-                    result.get("answer")
-                    or "Je n'ai pas reçu de réponse exploitable."
-                )
-                yield answer
-            except Exception:
-                logger.exception(
-                    "Erreur lors de l'appel à l'Agent Directeur n8n"
-                )
-                yield "Je rencontre un problème pour joindre l'Agent Directeur."
+        async def llm_node(self, chat_ctx, tools, model_settings):
+        """Envoie la demande de Sidney à l'Agent Directeur n8n."""
+        webhook_url = os.environ["N8N_LARA_WEBHOOK_URL"]
 
-    # To add tools, decorate methods with @function_tool. Example:
+        user_text = ""
+        for item in reversed(chat_ctx.items):
+            if getattr(item, "role", None) == "user":
+                user_text = getattr(item, "text_content", "") or ""
+                break
+
+        if not user_text:
+            yield "Je n'ai pas compris ta demande."
+            return
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    webhook_url,
+                    json={
+                        "message": user_text,
+                        "sessionId": "lara-liveavatar",
+                    },
+                )
+                response.raise_for_status()
+                result = response.json()
+
+            answer = (
+                result.get("answer")
+                or "Je n'ai pas reçu de réponse exploitable."
+            )
+            yield answer
+
+        except Exception:
+            logger.exception(
+                "Erreur lors de l'appel à l'Agent Directeur n8n"
+            )
+            yield "Je rencontre un problème pour joindre l'Agent Directeur."
+
+        # To add tools, decorate methods with @function_tool. Example:
     #
     #   from livekit.agents import function_tool, RunContext
     #
