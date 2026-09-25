@@ -40,7 +40,7 @@ class LiveAvatarAgent(Agent):
         )
         self._avatar_ws = avatar_ws
 
-        async def llm_node(self, chat_ctx, tools, model_settings):
+          async def llm_node(self, chat_ctx, tools, model_settings):
         """Envoie la demande de Sidney à l'Agent Directeur n8n."""
         webhook_url = os.environ["N8N_LARA_WEBHOOK_URL"]
 
